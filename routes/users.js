@@ -9,7 +9,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
     return res.status(500).json({ message: 'MongoDB not connected' });
   }
   try {
-    const users = await mongo.findAll('users');
+    const users = await mongo.findAll('users', { role: { $ne: 'admin' } });
     return res.json(users.map(u => ({ ...u, password: undefined })));
   } catch (e) { return res.status(500).json({ message: e.message }); }
 });
