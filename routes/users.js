@@ -26,14 +26,34 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, phone, password, role } = req.body;
   if (!mongo.connected) {
     return res.status(500).json({ message: 'MongoDB not connected' });
   }
   try {
-    const exists = await mongo.findAll('users', { email });
-    if (exists.length) return res.status(400).json({ message: 'Email exists' });
-    const user = { id: uuidv4(), name, email, password, role: role || 'user', createdAt: new Date().toISOString() };
+    const nextRole = role || 'user';
+    if (nextRole === 'admin' && !email) {
+      return res.status(400).json({ message: 'Admin creation requires email' });
+    }
+    if (nextRole !== 'admin' && !phone) {
+      return res.status(400).json({ message: 'Users require a phone number' });
+    }
+    const uniquenessFilters = [];
+    if (email) uniquenessFilters.push({ email });
+    if (phone) uniquenessFilters.push({ phone });
+    if (uniquenessFilters.length) {
+      const exists = await mongo.findAll('users', { $or: uniquenessFilters });
+      if (exists.length) return res.status(400).json({ message: 'Email or phone already exists' });
+    }
+    const user = {
+      id: uuidv4(),
+      name,
+      email: email || null,
+      phone: phone || null,
+      password,
+      role: nextRole,
+      createdAt: new Date().toISOString(),
+    };
     await mongo.insertOne('users', user);
     return res.json({ ...user, password: undefined });
   } catch (e) { return res.status(500).json({ message: e.message }); }
@@ -44,7 +64,28 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     return res.status(500).json({ message: 'MongoDB not connected' });
   }
   try {
-    const updated = await mongo.updateOne('users', { id: req.params.id }, req.body);
+    const payload = { ...req.body };
+    if (payload.email === '') payload.email = null;
+    if (payload.phone === '') payload.phone = null;
+    if (payload.role && payload.role === 'admin' && !payload.email) {
+      return res.status(400).json({ message: 'Admin accounts require email' });
+    }
+    if (payload.role && payload.role !== 'admin' && !payload.phone) {
+      return res.status(400).json({ message: 'User accounts require phone' });
+    }
+    if (payload.email || payload.phone) {
+      const uniquenessFilters = [];
+      if (payload.email) uniquenessFilters.push({ email: payload.email });
+      if (payload.phone) uniquenessFilters.push({ phone: payload.phone });
+      if (uniquenessFilters.length) {
+        const existing = await mongo.findAll('users', {
+          id: { $ne: req.params.id },
+          $or: uniquenessFilters,
+        });
+        if (existing.length) return res.status(400).json({ message: 'Email or phone already exists' });
+      }
+    }
+    const updated = await mongo.updateOne('users', { id: req.params.id }, payload);
     return res.json({ ...updated, password: undefined });
   } catch (e) { return res.status(500).json({ message: e.message }); }
 });
