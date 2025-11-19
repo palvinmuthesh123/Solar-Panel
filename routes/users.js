@@ -10,7 +10,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
   }
   try {
     const users = await mongo.findAll('users', { role: { $ne: 'admin' } });
-    return res.json(users.map(u => ({ ...u, password: undefined })));
+    return res.json(users);
   } catch (e) { return res.status(500).json({ message: e.message }); }
 });
 
