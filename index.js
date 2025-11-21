@@ -9,6 +9,7 @@ const requestsRoutes = require('./routes/requests');
 const productsRoutes = require('./routes/products');
 const feedbackRoutes = require('./routes/feedback');
 const uploadRoutes = require('./routes/upload');
+const reportsRoutes = require('./routes/reports');
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,7 @@ app.use('/api/requests', requestsRoutes);
 app.use('/api/products', productsRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api', uploadRoutes);
+app.use('/api/reports', reportsRoutes);
 
 const PORT = process.env.PORT || 5000;
 // try connect to mongo if MONGO_URI is provided
