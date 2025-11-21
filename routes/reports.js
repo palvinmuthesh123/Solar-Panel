@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const mongo = require('../utils/mongo');
+const fs = require('fs');
+const path = require('path');
 
 function toCsv(rows, headers) {
   const escape = (v) => {
@@ -45,8 +47,19 @@ router.get('/stock', async (req, res) => {
 
     const rows = filtered.map(p => ({ id: p.id, name: p.name, sku: p.sku, stock: p.stock ?? 0, price: p.price ?? 0, createdAt: p.createdAt || '' }));
     const csv = toCsv(rows, ['id','name','sku','stock','price','createdAt']);
-    res.setHeader('Content-Type', 'text/csv');
-    res.send(csv);
+    try {
+      const outDir = path.join(__dirname, '..', 'tmp', 'reports');
+      fs.mkdirSync(outDir, { recursive: true });
+      const filename = `stock-report-${Date.now()}.csv`;
+      const filepath = path.join(outDir, filename);
+      fs.writeFileSync(filepath, csv, 'utf8');
+      const fileUrl = `${req.protocol}://${req.get('host')}/files/${filename}`;
+      return res.json({ fileUrl });
+    } catch (err) {
+      // fallback to returning CSV text
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(csv);
+    }
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
@@ -73,8 +86,19 @@ router.get('/customers', async (req, res) => {
     });
     const rows = filtered.map(u => ({ id: u.id, name: u.name, email: u.email || '', phone: u.phone || '', role: u.role || '', createdAt: u.createdAt || '' }));
     const csv = toCsv(rows, ['id','name','email','phone','role','createdAt']);
-    res.setHeader('Content-Type', 'text/csv');
-    res.send(csv);
+    try {
+      const outDir = path.join(__dirname, '..', 'tmp', 'reports');
+      fs.mkdirSync(outDir, { recursive: true });
+      const filename = `customers-report-${Date.now()}.csv`;
+      const filepath = path.join(outDir, filename);
+      fs.writeFileSync(filepath, csv, 'utf8');
+      const fileUrl = `${req.protocol}://${req.get('host')}/files/${filename}`;
+      return res.json({ fileUrl });
+    } catch (err) {
+      // fallback to returning CSV text
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(csv);
+    }
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
