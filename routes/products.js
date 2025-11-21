@@ -64,6 +64,31 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       updatePayload.imageUrl = result.secure_url;
     }
 
+    // handle stock adjustment operations if requested
+    if ((updatePayload.stockAction || updatePayload.stockAdjustment) && mongo.connected) {
+      const existing = await mongo.findOne('products', { id: req.params.id });
+      if (existing) {
+        const action = updatePayload.stockAction;
+        const adj = Number(updatePayload.stockAdjustment || 0) || 0;
+        const prev = Number(existing.stock || 0);
+        let newStock = prev;
+        if (action === 'in') newStock = prev + adj;
+        else if (action === 'out') newStock = Math.max(0, prev - adj);
+
+        updatePayload.stock = newStock;
+
+        // record history
+        try {
+          await mongo.insertOne('stockHistory', { id: uuidv4(), productId: req.params.id, change: adj, type: action, prevStock: prev, newStock, by: req.user && req.user.id, createdAt: new Date().toISOString() });
+        } catch (err) {
+          // ignore history failures
+        }
+      }
+      // remove helper fields so they are not persisted directly
+      delete updatePayload.stockAction;
+      delete updatePayload.stockAdjustment;
+    }
+
     if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
     const upd = await mongo.updateOne('products', { id: req.params.id }, updatePayload);
     return res.json(upd);
