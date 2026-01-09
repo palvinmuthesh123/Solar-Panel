@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
-const db = require('../utils/db');
 const mongo = require('../utils/mongo');
 
 const SECRET = process.env.JWT_SECRET || 'dev-secret';
