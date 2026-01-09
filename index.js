@@ -13,7 +13,12 @@ const reportsRoutes = require('./routes/reports');
 
 const path = require('path');
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
+app.options("*", cors());
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);

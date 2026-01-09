@@ -53,9 +53,11 @@ router.get('/stock', async (req, res) => {
       const filename = `stock-report-${Date.now()}.csv`;
       const filepath = path.join(outDir, filename);
       fs.writeFileSync(filepath, csv, 'utf8');
+      console.log('Report written:', filepath);
       const fileUrl = `${req.protocol}://${req.get('host')}/files/${filename}`;
       return res.json({ fileUrl });
     } catch (err) {
+      console.error('Failed writing report file:', err && err.message ? err.message : err);
       // fallback to returning CSV text
       res.setHeader('Content-Type', 'text/csv');
       res.send(csv);
@@ -92,9 +94,11 @@ router.get('/customers', async (req, res) => {
       const filename = `customers-report-${Date.now()}.csv`;
       const filepath = path.join(outDir, filename);
       fs.writeFileSync(filepath, csv, 'utf8');
+      console.log('Report written:', filepath);
       const fileUrl = `${req.protocol}://${req.get('host')}/files/${filename}`;
       return res.json({ fileUrl });
     } catch (err) {
+      console.error('Failed writing report file:', err && err.message ? err.message : err);
       // fallback to returning CSV text
       res.setHeader('Content-Type', 'text/csv');
       res.send(csv);
