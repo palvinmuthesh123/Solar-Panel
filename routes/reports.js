@@ -183,3 +183,36 @@ router.get('/download', async (req, res) => {
     res.status(500).json({ message: e.message });
   }
 });
+
+// POST /api/reports/export
+// Body: { filename?: string, headers: string[], rows: Array<object> }
+router.post('/export', async (req, res) => {
+  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
+  try {
+    const { filename, headers, rows } = req.body;
+    if (!rows || !Array.isArray(rows)) return res.status(400).json({ message: 'Rows array required' });
+    let hdrs = headers;
+    if (!hdrs || !Array.isArray(hdrs) || hdrs.length === 0) {
+      // infer headers from first row
+      const first = rows[0] || {};
+      hdrs = Object.keys(first);
+    }
+    const csv = toCsv(rows, hdrs);
+    try {
+      const outDir = path.join(__dirname, '..', 'tmp', 'reports');
+      fs.mkdirSync(outDir, { recursive: true });
+      const name = filename && typeof filename === 'string' ? filename.replace(/[^a-z0-9\-_.]/gi, '_') : `export-${Date.now()}.csv`;
+      const filepath = path.join(outDir, name);
+      fs.writeFileSync(filepath, csv, 'utf8');
+      console.log('Export written:', filepath);
+      const fileUrl = `${req.protocol}://${req.get('host')}/files/${name}`;
+      return res.json({ fileUrl });
+    } catch (err) {
+      console.error('Failed writing export file:', err && err.message ? err.message : err);
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(csv);
+    }
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
