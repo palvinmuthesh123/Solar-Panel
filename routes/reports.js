@@ -109,3 +109,77 @@ router.get('/customers', async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/reports/download?type=bookings|requests|customers&from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/download', async (req, res) => {
+  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
+  try {
+    const type = req.query.type;
+    const from = parseDateParam(req.query.from);
+    const to = parseDateParam(req.query.to);
+
+    let headers = [];
+    let rows = [];
+    if (type === 'bookings') {
+      const all = await mongo.findAll('bookings');
+      const filtered = all.filter(b => {
+        if (from || to) {
+          const created = b.createdAt ? new Date(b.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        return true;
+      });
+      headers = ['id','name','capacityKW','status','userId','userName','createdAt'];
+      rows = filtered.map(b => ({ id: b.id, name: b.name || '', capacityKW: b.capacityKW || 0, status: b.status || '', userId: b.userId || '', userName: b.user && b.user.name || '', createdAt: b.createdAt || '' }));
+    } else if (type === 'requests') {
+      const all = await mongo.findAll('requests');
+      const filtered = all.filter(r => {
+        if (from || to) {
+          const created = r.createdAt ? new Date(r.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        return true;
+      });
+      headers = ['id','type','status','userId','userName','createdAt'];
+      rows = filtered.map(r => ({ id: r.id, type: r.type || '', status: r.status || '', userId: r.userId || '', userName: r.user && r.user.name || '', createdAt: r.createdAt || '' }));
+    } else if (type === 'customers') {
+      const all = await mongo.findAll('users');
+      const filtered = all.filter(u => {
+        if (from || to) {
+          const created = u.createdAt ? new Date(u.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        return true;
+      });
+      headers = ['id','name','email','phone','role','createdAt'];
+      rows = filtered.map(u => ({ id: u.id, name: u.name || '', email: u.email || '', phone: u.phone || '', role: u.role || '', createdAt: u.createdAt || '' }));
+    } else {
+      return res.status(400).json({ message: 'Invalid type' });
+    }
+
+    const csv = toCsv(rows, headers);
+    try {
+      const outDir = path.join(__dirname, '..', 'tmp', 'reports');
+      fs.mkdirSync(outDir, { recursive: true });
+      const filename = `${type}-report-${Date.now()}.csv`;
+      const filepath = path.join(outDir, filename);
+      fs.writeFileSync(filepath, csv, 'utf8');
+      console.log('Report written:', filepath);
+      const fileUrl = `${req.protocol}://${req.get('host')}/files/${filename}`;
+      return res.json({ fileUrl });
+    } catch (err) {
+      console.error('Failed writing report file:', err && err.message ? err.message : err);
+      // fallback to returning CSV text
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(csv);
+    }
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
