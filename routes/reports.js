@@ -110,6 +110,112 @@ router.get('/customers', async (req, res) => {
 
 module.exports = router;
 
+// POST /api/reports/export-filter
+// Body: { type: string, filters?: { from?, to?, status?, userId?, role?, search?, inStock? } }
+router.post('/export-filter', async (req, res) => {
+  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
+  try {
+    const { type, filters = {} } = req.body;
+    const from = parseDateParam(filters.from);
+    const to = parseDateParam(filters.to);
+
+    let headers = [];
+    let rows = [];
+
+    if (type === 'bookings') {
+      const all = await mongo.findAll('bookings');
+      const filtered = all.filter(b => {
+        if (from || to) {
+          const created = b.createdAt ? new Date(b.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        if (filters.status && filters.status !== 'All' && b.status !== filters.status) return false;
+        if (filters.userId && filters.userId !== 'all' && b.userId !== filters.userId) return false;
+        return true;
+      });
+      headers = ['id','name','capacityKW','status','userId','userName','createdAt'];
+      rows = filtered.map(b => ({ id: b.id, name: b.name || '', capacityKW: b.capacityKW || 0, status: b.status || '', userId: b.userId || '', userName: b.user && b.user.name || '', createdAt: b.createdAt || '' }));
+    } else if (type === 'requests') {
+      const all = await mongo.findAll('requests');
+      const filtered = all.filter(r => {
+        if (from || to) {
+          const created = r.createdAt ? new Date(r.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        if (filters.status && filters.status !== 'All' && r.status !== filters.status) return false;
+        if (filters.userId && filters.userId !== 'all' && r.userId !== filters.userId) return false;
+        return true;
+      });
+      headers = ['id','type','status','userId','userName','createdAt'];
+      rows = filtered.map(r => ({ id: r.id, type: r.type || '', status: r.status || '', userId: r.userId || '', userName: r.user && r.user.name || '', createdAt: r.createdAt || '' }));
+    } else if (type === 'customers' || type === 'users') {
+      const all = await mongo.findAll('users');
+      const filtered = all.filter(u => {
+        if (from || to) {
+          const created = u.createdAt ? new Date(u.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        if (filters.role && filters.role !== 'all' && (u.role || '').toLowerCase() !== String(filters.role).toLowerCase()) return false;
+        if (filters.search) {
+          const q = String(filters.search).toLowerCase();
+          const name = (u.name || '').toLowerCase();
+          const email = (u.email || '').toLowerCase();
+          if (!name.includes(q) && !email.includes(q)) return false;
+        }
+        return true;
+      });
+      headers = ['id','name','email','phone','role','createdAt'];
+      rows = filtered.map(u => ({ id: u.id, name: u.name || '', email: u.email || '', phone: u.phone || '', role: u.role || '', createdAt: u.createdAt || '' }));
+    } else if (type === 'stock' || type === 'products') {
+      const all = await mongo.findAll('products');
+      const filtered = all.filter(p => {
+        if (from || to) {
+          const created = p.createdAt ? new Date(p.createdAt) : null;
+          if (!created) return false;
+          if (from && created < from) return false;
+          if (to) { const t = new Date(to); t.setHours(23,59,59,999); if (created > t) return false; }
+        }
+        if (filters.inStock === 'in' && Number(p.stock || 0) <= 0) return false;
+        if (filters.inStock === 'out' && Number(p.stock || 0) > 0) return false;
+        if (filters.search) {
+          const q = String(filters.search).toLowerCase();
+          const name = (p.name || '').toLowerCase();
+          const sku = (p.sku || '').toLowerCase();
+          if (!name.includes(q) && !sku.includes(q)) return false;
+        }
+        return true;
+      });
+      headers = ['id','name','sku','stock','price','createdAt'];
+      rows = filtered.map(p => ({ id: p.id, name: p.name || '', sku: p.sku || '', stock: p.stock ?? 0, price: p.price ?? '', createdAt: p.createdAt || '' }));
+    } else {
+      return res.status(400).json({ message: 'Invalid type for export' });
+    }
+
+    const csv = toCsv(rows, headers);
+    try {
+      const outDir = path.join(__dirname, '..', 'tmp', 'reports');
+      fs.mkdirSync(outDir, { recursive: true });
+      const filename = `${type}-report-${Date.now()}.csv`;
+      const filepath = path.join(outDir, filename);
+      fs.writeFileSync(filepath, csv, 'utf8');
+      const fileUrl = `${req.protocol}://${req.get('host')}/files/${filename}`;
+      return res.json({ fileUrl });
+    } catch (err) {
+      console.error('Failed writing filtered export file:', err && err.message ? err.message : err);
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(csv);
+    }
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
 // GET /api/reports/download?type=bookings|requests|customers&from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/download', async (req, res) => {
   if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
