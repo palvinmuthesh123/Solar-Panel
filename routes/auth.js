@@ -24,18 +24,26 @@ router.post('/login', async (req, res) => {
   const { email, phone, password } = req.body;
   if (!password) return res.status(400).json({ message: 'Password required' });
   if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
-    try {
-      // build query: match password and either email or phone
-      const q = { password };
-      if (email) q.email = email;
-      else if (phone) q.phone = phone;
-      else return res.status(400).json({ message: 'Email or phone required' });
-      const arr = await mongo.findAll('users', q);
-      const user = arr[0];
-      if (!user) return res.status(401).json({ message: 'Invalid credentials' });
-      const token = jwt.sign({ id: user.id, role: user.role }, SECRET);
-      return res.json({ user: { ...user, password: undefined }, token });
-    } catch (e) { return res.status(500).json({ message: e.message }); }
+
+  try {
+    const q = {};
+    if (email) q.email = email;
+    else if (phone) q.phone = phone;
+    else return res.status(400).json({ message: 'Email or phone required' });
+
+    // 🔥 FAST QUERY (indexed field)
+    const user = await mongo.findOne('users', q);
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user.id, role: user.role }, SECRET);
+    return res.json({ user: { ...user, password: undefined }, token });
+
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
 });
 
 module.exports = router;
