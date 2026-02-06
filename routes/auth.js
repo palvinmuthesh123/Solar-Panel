@@ -6,43 +6,84 @@ const mongo = require('../utils/mongo');
 
 const SECRET = process.env.JWT_SECRET || 'dev-secret';
 
+/* ---------------- REGISTER ---------------- */
 router.post('/register', async (req, res) => {
   const { name, email, password, role } = req.body;
-  if (!mongo.connected) 
-    return res.status(500).json({ message: 'MongoDB not connected' });
-    try {
-      const existing = await mongo.findAll('users', { email });
-      if (existing.length) return res.status(400).json({ message: 'Email exists' });
-      const user = { id: uuidv4(), name, email, password, role: role || 'user', createdAt: new Date().toISOString() };
-      await mongo.insertOne('users', user);
-      const token = jwt.sign({ id: user.id, role: user.role }, SECRET);
-      return res.json({ user: { ...user, password: undefined }, token });
-    } catch (e) { return res.status(500).json({ message: e.message }); }
-});
 
-router.post('/login', async (req, res) => {
-  const { email, phone, password } = req.body;
-  if (!password) return res.status(400).json({ message: 'Password required' });
-  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password required' });
+  }
 
   try {
-    const q = {};
-    if (email) q.email = email;
-    else if (phone) q.phone = phone;
-    else return res.status(400).json({ message: 'Email or phone required' });
+    // Ensure Mongo is ready (NO cold failure)
+    await mongo.ensureConnected();
 
-    // 🔥 FAST QUERY (indexed field)
-    const user = await mongo.findOne('users', q);
+    const existing = await mongo.findOne('users', { email });
+    if (existing) {
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    const user = {
+      id: uuidv4(),
+      name,
+      email,
+      password, // ⚠️ plaintext (bcrypt recommended later)
+      role: role || 'user',
+      createdAt: new Date()
+    };
+
+    await mongo.insertOne('users', user);
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      user: { ...user, password: undefined },
+      token
+    });
+
+  } catch (e) {
+    console.error('Register error:', e);
+    return res.status(500).json({ message: 'Registration failed' });
+  }
+});
+
+/* ---------------- LOGIN ---------------- */
+router.post('/login', async (req, res) => {
+  const { email, phone, password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ message: 'Password required' });
+  }
+
+  if (!email && !phone) {
+    return res.status(400).json({ message: 'Email or phone required' });
+  }
+
+  try {
+    // 🔥 GUARANTEES Mongo is connected BEFORE query
+    await mongo.ensureConnected();
+
+    const query = email ? { email } : { phone };
+
+    // ⚡ SINGLE indexed query
+    const user = await mongo.findOne('users', query);
 
     if (!user || user.password !== password) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user.id, role: user.role }, SECRET);
+    const token = jwt.sign({ id: user.id, role: user.role }, SECRET,
+      { expiresIn: '7d' }
+    );
     return res.json({ user: { ...user, password: undefined }, token });
 
   } catch (e) {
-    return res.status(500).json({ message: e.message });
+    console.error('Login error:', e);
+    return res.status(500).json({ message: 'Login failed' });
   }
 });
 
