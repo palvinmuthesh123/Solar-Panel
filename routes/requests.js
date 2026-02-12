@@ -3,11 +3,11 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const mongo = require('../utils/mongo');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { ensureDb } = require('../middleware/db');
+
+router.use(ensureDb);
 
 router.get('/', requireAuth, async (req, res) => {
-  if (!mongo.connected) {
-    return res.status(500).json({ message: 'MongoDB not connected' });
-  }
   try {
     // If requester is admin, return all; otherwise return only their requests
     const filter = req.user?.role === 'admin' ? {} : { userId: req.user?.id };
@@ -17,17 +17,11 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 router.get('/:id', requireAuth, async (req, res) => {
-  if (!mongo.connected) {
-    return res.status(500).json({ message: 'MongoDB not connected' });
-  }
   try { const r = await mongo.findOne('requests', { id: req.params.id }); if (!r) return res.status(404).json({ message: 'Not found' }); return res.json(r); } catch (e) { return res.status(500).json({ message: e.message }); }
 });
 
 router.post('/', requireAuth, async (req, res) => {
   const { type, comments, status } = req.body;
-  if (!mongo.connected) {
-    return res.status(500).json({ message: 'MongoDB not connected' });
-  }
   try {
     const item = {
       id: uuidv4(),
@@ -49,9 +43,6 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 router.put('/:id', requireAuth, async (req, res) => {
-  if (!mongo.connected) {
-    return res.status(500).json({ message: 'MongoDB not connected' });
-  }
   try {
     const existing = await mongo.findOne('requests', { id: req.params.id });
     if (!existing) return res.status(404).json({ message: 'Not found' });
@@ -73,17 +64,11 @@ router.put('/:id', requireAuth, async (req, res) => {
 });
 
 router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
-  if (!mongo.connected) {
-    return res.status(500).json({ message: 'MongoDB not connected' });
-  }
   try { await mongo.deleteOne('requests', { id: req.params.id }); return res.json({}); } catch (e) { return res.status(500).json({ message: e.message }); }
 });
 
 router.patch('/:id/status', requireAuth, requireAdmin, async (req, res) => {
   const { status } = req.body;
-  if (!mongo.connected) {
-    return res.status(500).json({ message: 'MongoDB not connected' });
-  }
   try { const r = await mongo.updateOne('requests', { id: req.params.id }, { status }); return res.json(r); } catch (e) { return res.status(500).json({ message: e.message }); }
 });
 

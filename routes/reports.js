@@ -3,6 +3,9 @@ const router = express.Router();
 const mongo = require('../utils/mongo');
 const fs = require('fs');
 const path = require('path');
+const { ensureDb } = require('../middleware/db');
+
+router.use(ensureDb);
 
 function toCsv(rows, headers) {
   const escape = (v) => {
@@ -27,7 +30,6 @@ function parseDateParam(v) {
 
 // GET /api/reports/stock?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/stock', async (req, res) => {
-  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
@@ -69,7 +71,6 @@ router.get('/stock', async (req, res) => {
 
 // GET /api/reports/customers?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/customers', async (req, res) => {
-  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
   try {
     const from = parseDateParam(req.query.from);
     const to = parseDateParam(req.query.to);
@@ -113,7 +114,6 @@ module.exports = router;
 // POST /api/reports/export-filter
 // Body: { type: string, filters?: { from?, to?, status?, userId?, role?, search?, inStock? } }
 router.post('/export-filter', async (req, res) => {
-  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
   try {
     const { type, filters = {} } = req.body;
     const from = parseDateParam(filters.from);
@@ -218,7 +218,6 @@ router.post('/export-filter', async (req, res) => {
 
 // GET /api/reports/download?type=bookings|requests|customers&from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/download', async (req, res) => {
-  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
   try {
     const type = req.query.type;
     const from = parseDateParam(req.query.from);
@@ -293,7 +292,6 @@ router.get('/download', async (req, res) => {
 // POST /api/reports/export
 // Body: { filename?: string, headers: string[], rows: Array<object> }
 router.post('/export', async (req, res) => {
-  if (!mongo.connected) return res.status(500).json({ message: 'MongoDB not connected' });
   try {
     const { filename, headers, rows } = req.body;
     if (!rows || !Array.isArray(rows)) return res.status(400).json({ message: 'Rows array required' });

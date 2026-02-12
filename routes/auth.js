@@ -6,6 +6,19 @@ const mongo = require('../utils/mongo');
 
 const SECRET = process.env.JWT_SECRET || 'dev-secret';
 
+// Middleware to ensure Mongo connection for all auth routes
+const ensureDb = async (req, res, next) => {
+  try {
+    await mongo.ensureConnected();
+    return next();
+  } catch (e) {
+    console.error('DB connect failed (auth):', e);
+    return res.status(503).json({ message: 'Database unavailable' });
+  }
+};
+
+router.use(ensureDb);
+
 /* ---------------- REGISTER ---------------- */
 router.post('/register', async (req, res) => {
   const { name, email, password, role } = req.body;
@@ -15,8 +28,7 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    // Ensure Mongo is ready (NO cold failure)
-    await mongo.ensureConnected();
+    // DB connection ensured by `ensureDb` middleware
 
     const existing = await mongo.findOne('users', { email });
     if (existing) {
@@ -64,8 +76,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // 🔥 GUARANTEES Mongo is connected BEFORE query
-    await mongo.ensureConnected();
+    // DB connection ensured by `ensureDb` middleware
 
     const query = email ? { email } : { phone };
 
